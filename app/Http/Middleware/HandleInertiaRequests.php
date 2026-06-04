@@ -1,0 +1,91 @@
+<?php
+
+namespace App\Http\Middleware;
+
+use Illuminate\Foundation\Inspiring;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Inertia\Middleware;
+
+class HandleInertiaRequests extends Middleware
+{
+    /**
+     * The root template that's loaded on the first page visit.
+     *
+     * @see https://inertiajs.com/server-side-setup#root-template
+     *
+     * @var string
+     */
+    protected $rootView = 'app';
+
+    /**
+     * Determines the current asset version.
+     *
+     * @see https://inertiajs.com/asset-versioning
+     */
+    public function version(Request $request): ?string
+    {
+        return parent::version($request);
+    }
+
+    /**
+     * Define the props that are shared by default.
+     *
+     * @see https://inertiajs.com/shared-data
+     *
+     * @return array<string, mixed>
+     */
+    public function share(Request $request): array
+    {
+        [$message, $author] = str(Inspiring::quotes()->random())->explode('-');
+
+        return [
+            ...parent::share($request),
+            'name' => config('app.name'),
+            'quote' => ['message' => trim($message), 'author' => trim($author)],
+            'auth' => [
+                'user' => $request->user(),
+                'notificationCount' => $request->user() ? $request->user()->unreadNotifications()->count() : 0,
+            ],
+            'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+
+            // User Context
+            'user_info' => function () {
+                $user = Auth::user();
+
+                if (!$user) {
+                    return null;    // guest
+                }
+
+                $data = [
+                    'user_id'   => $user->id,
+                    'user_name' => $user->name,
+                    'user_role' => $user->role, // student | faculty
+                ];
+
+                // If faculty, there is additional information
+                if ($user->role === 'faculty' && $user->faculty) {
+                    $data['is_admin'] = $user->faculty->isAdmin();
+                    $data['faculty_id']   = $user->faculty->id;
+                    $data['faculty_roles']   = $user->faculty->roles->pluck('role_name')->toArray();     // expect duplicate rol;e, since no active and calendar sync yet
+                }
+
+                return $data;
+            },
+            
+            // Toast Setups
+            'flash' => [
+                'success' => session('success'),
+                'error' => session('error'),
+                'info' => session('info'),
+                'warning' => session('warning'),
+            ],
+
+            // Guest Handler
+            'visitor' => fn() => [
+                'type' => auth()->check() ? 'user' : (request()->cookie('guest_id') ? 'guest' : null),
+                'id' => auth()->id() ?? request()->cookie('guest_id'),
+            ],
+        ];
+    }
+}

@@ -1,0 +1,41 @@
+<?php
+
+use App\Http\Middleware\EnsureGuest;
+use App\Http\Middleware\HandleAppearance;
+use App\Http\Middleware\HandleInertiaRequests;
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Configuration\Exceptions;
+use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__.'/../routes/web.php',
+        commands: __DIR__.'/../routes/console.php',
+        health: '/up',
+    )
+    ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
+
+        $middleware->web(append: [
+            HandleAppearance::class,
+            HandleInertiaRequests::class,
+            AddLinkHeadersForPreloadedAssets::class,
+        ]);
+        
+        $middleware->alias([
+            // main role checker    (either student or faculty)
+            'role' => \App\Http\Middleware\CheckRole::class,
+
+            // faculty role: admin checker
+            'faculty.admin' => \App\Http\Middleware\FacultyIsAdmin::class,
+
+            // faculty sub-roles checker
+            'faculty.role' => \App\Http\Middleware\CheckFacultyRole::class,
+
+            'guestAuth' => \App\Http\Middleware\Guest::class,
+        ]);
+    })
+    ->withExceptions(function (Exceptions $exceptions): void {
+        //
+    })->create();
